@@ -22,6 +22,10 @@ class TitlePage(ft.View):
                 ft.ElevatedButton(
                     "Go to Printers Page",
                     on_click=lambda _: page.go("/printers")
-                )
+                ),
+                ft.ElevatedButton(
+                    "Go to Service Manager",
+                    on_click=lambda _: self.page.go("/service")
+                ),
             ]
         )

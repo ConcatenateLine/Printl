@@ -1,14 +1,15 @@
 import flet as ft
+from pages.service_manager import ServiceManager
 from pages.title_page import TitlePage
 from pages.counter_page import CounterPage
 from pages.printers_page import PrintersPage
 import multiprocessing
-from api.server import printserver
+# from api.server import printserver
 
 # Run FastAPI and Flet in parallel
-def run_fastapi():
-    import uvicorn
-    uvicorn.run(printserver, host="0.0.0.0", port=9417)
+# def run_fastapi():
+#     import uvicorn
+#     uvicorn.run(printserver, host="0.0.0.0", port=9417)
 
 def app(page: ft.Page):
     # Set up the page
@@ -21,6 +22,7 @@ def app(page: ft.Page):
     page.views.append(TitlePage(page))
     page.views.append(CounterPage(page))
     page.views.append(PrintersPage(page).create_view())
+    page.views.append(ServiceManager(page).create_view())
     
     # Handle navigation
     def route_change(e):
@@ -31,30 +33,27 @@ def app(page: ft.Page):
             page.views.append(CounterPage(page))
         elif page.route == "/printers":
             page.views.append(PrintersPage(page).create_view())
+        elif page.route == "/service":
+            page.views.append(ServiceManager(page).create_view())
         page.update()
 
     page.on_route_change = route_change
     page.go("/title")
     
-def run_app():
-    ft.app(target=app)
+# def run_app():
+ft.app(app)
     
-if __name__ == "__main__":
-    server_process = multiprocessing.Process(target=run_fastapi)
-    client_process = multiprocessing.Process(target=run_app)
+# if __name__ == "__main__":
+#     # server_process = multiprocessing.Process(target=run_fastapi)
+#     client_process = multiprocessing.Process(target=run_app)
     
-    server_process.start()
-    client_process.start()
+#     # server_process.start()
+#     client_process.start()
     
-    try:
-        client_process.join()
-        server_process.join()
-    except KeyboardInterrupt:
-        print("Shutting down...")
-        handle_shutdown()
-    finally:
-        # Ensure processes are terminated
-        if server_process.is_alive():
-            server_process.terminate()
-        if client_process.is_alive():
-            client_process.terminate()
+#     try:
+#         client_process.join()
+#         # server_process.join()
+#     except KeyboardInterrupt:
+#         print("Shutting down...")
+#         # server_process.terminate()
+#         client_process.terminate()
