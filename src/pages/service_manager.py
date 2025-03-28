@@ -1,18 +1,39 @@
 import flet as ft
 import subprocess
-import os
-import signal
 import time
 
 from flet.utils.files import shutil
 
 class ServiceManager:
+    page: ft.Page | None = None
+    server_process: subprocess.Popen | None = None
+    is_running: bool = False
+    
+    controls = {}
+
     def __init__(self, page: ft.Page):
         self.page = page
         self.server_process = None
         self.is_running = False
+        self.state = self.page.session.get("state")
 
     def create_view(self):
+        self.controls['server_status'] = ft.Text("Stopped", size=16, color=ft.Colors.RED)
+        self.controls['start_button'] = ft.ElevatedButton(
+            "Start Server",
+            icon=ft.Icons.PLAY_ARROW,
+            on_click=self.start_server,
+            key="start_button"
+        )
+        self.controls['stop_button'] = ft.ElevatedButton(
+            "Stop Server",
+            icon=ft.Icons.STOP,
+            on_click=self.stop_server,
+            disabled=True,
+            key="stop_button"
+        )
+        self.controls['logs_text'] = ft.Text("") 
+        
         return ft.View(
             "/service",
             [
@@ -25,31 +46,22 @@ class ServiceManager:
                 ),
                 ft.Column(
                     [
-                        ft.Text("Server Status", size=20),
-                        ft.Text("Stopped", size=16, color=ft.Colors.RED),
+                        self.controls['server_status'],
                         ft.Row(
                             [
-                                ft.ElevatedButton(
-                                    "Start Server",
-                                    icon=ft.Icons.PLAY_ARROW,
-                                    on_click=self.start_server,
-                                ),
-                                ft.ElevatedButton(
-                                    "Stop Server",
-                                    icon=ft.Icons.STOP,
-                                    on_click=self.stop_server,
-                                    disabled=True
-                                )
+                                self.controls['start_button'],
+                                self.controls['stop_button']
                             ],
                             alignment=ft.MainAxisAlignment.CENTER
                         ),
                         ft.Text("Server Logs", size=16, weight=ft.FontWeight.BOLD),
                         ft.Container(
-                            ft.Text(""),
+                            self.controls['logs_text'],
                             height=200,
                             padding=10,
                             bgcolor=ft.Colors.SURFACE,
                             border_radius=10,
+                            key="logs_text"
                         )
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
@@ -57,27 +69,6 @@ class ServiceManager:
                 )
             ]
         )
-
-    # def start_server(self, e):
-    #     if not self.is_running:
-    #         self.server_process = subprocess.Popen(
-    #             ["python", "-m", "uvicorn", "api.server:printserver", "--host", "0.0.0.0", "--port", "9417"],
-    #             stdout=subprocess.PIPE,
-    #             stderr=subprocess.STDOUT,
-    #             text=True
-    #         )
-    #         self.is_running = True
-    #         self.update_ui()
-    #         self.update_logs()
-    
-    #    def add_printer(self, e):
-    #     # TODO: Implement printer addition dialog
-    #     self.page.open(
-    #         ft.SnackBar(
-    #             ft.Text("Add printer feature coming soon!"),
-    #             action="OK",
-    #         )
-    #     )
         
     def start_server(self, e):
         if self.is_running:
@@ -98,7 +89,8 @@ class ServiceManager:
 
             # Start the server
             self.server_process = subprocess.Popen(
-                [python_path, "-m", "uvicorn", "src.api.server:printserver", "--host", "0.0.0.0", "--port", "9417"],
+                [python_path, "-m", "uvicorn", "src.api.server:printserver",
+                    "--host", "0.0.0.0", "--port", "9417"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -110,20 +102,23 @@ class ServiceManager:
             if self.server_process.poll() is not None:
                 stdout, stderr = self.server_process.communicate()
                 error_msg = stderr.strip() if stderr else stdout.strip()
-                print(f"Server failed to start with exit code {self.server_process.poll()}\nError: {error_msg}")
-                
-                raise RuntimeError(f"Server failed to start with exit code {self.server_process.poll()}\nError: {error_msg}")
-            
-                   # Verify server is running
+                print(
+                    f"Server failed to start with exit code {self.server_process.poll()}\nError: {error_msg}")
+
+                raise RuntimeError(
+                    f"Server failed to start with exit code {self.server_process.poll()}\nError: {error_msg}")
+
+            # Verify server is running
             try:
                 import requests
                 response = requests.get("http://127.0.0.1:9417/api/print")
                 if response.status_code != 200:
-                    raise RuntimeError(f"Server started but health check failed: {response.text}")
+                    raise RuntimeError(
+                        f"Server started but health check failed: {response.text}")
             except Exception as e:
                 self.server_process.terminate()
-                raise RuntimeError(f"Server started but failed health check: {str(e)}")
-
+                raise RuntimeError(
+                    f"Server started but failed health check: {str(e)}")
 
             self.is_running = True
             self.update_ui()
@@ -156,10 +151,11 @@ class ServiceManager:
     def stop_server(self, e):
         if self.is_running:
             try:
-                os.kill(self.server_process.pid, signal.SIGTERM)
+                self.server_process.terminate()
                 self.server_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                os.kill(self.server_process.pid, signal.SIGKILL)
+                raise RuntimeError("Failed to stop server")
+            
             self.server_process = None
             self.is_running = False
             self.update_ui()
@@ -168,17 +164,20 @@ class ServiceManager:
         if self.server_process and self.is_running:
             while True:
                 line = self.server_process.stdout.readline()
+                print('line')
+                print(line)
                 if not line:
                     break
-                logs = self.page.get_control("logs_text")
+                logs = self.page.get_control(self.controls['logs_text'].uid)
+                print(line)
                 logs.value += line
                 logs.update()
                 time.sleep(0.1)
 
     def update_ui(self):
-        status = self.page.get_control("status_text")
-        start_button = self.page.get_control("start_button")
-        stop_button = self.page.get_control("stop_button")
+        status = self.page.get_control(self.controls['server_status'].uid)
+        start_button = self.page.get_control(self.controls['start_button'].uid)
+        stop_button = self.page.get_control(self.controls['stop_button'].uid)
 
         if self.is_running:
             status.value = "Running"
@@ -194,3 +193,4 @@ class ServiceManager:
         status.update()
         start_button.update()
         stop_button.update()
+    

@@ -1,5 +1,9 @@
 # Printl app
 
+## Description
+
+Printl is a desktop application for managing printers and exposing them as a service.
+
 ## Run the app
 
 ### uv

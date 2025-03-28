@@ -2,36 +2,8 @@ from fastapi import FastAPI, HTTPException
 
 from .database import create_db_and_tables, list_printers, SessionDep, Printer, Config
 from sqlmodel import select
-import threading
-import uvicorn
-import signal
 
 printserver = FastAPI()
-
-# # Shutdown event
-# shutdown_event = threading.Event()
-
-# def shutdown_server():
-#     print("Server is shutting down...")
-#     shutdown_event.set()
-
-# def server_main():
-#     config = uvicorn.Config(
-#         app=printserver,
-#         host="0.0.0.0",
-#         port=9417,
-#         lifespan="on"
-#     )
-#     server = uvicorn.Server(config)
-    
-#     def handle_sigterm(signum, frame):
-#         server.should_exit = True
-#         shutdown_server()
-    
-#     signal.signal(signal.SIGTERM, handle_sigterm)
-#     signal.signal(signal.SIGINT, handle_sigterm)
-    
-#     server.run()
 
 @printserver.on_event("startup")
 def on_startup():
@@ -77,6 +49,3 @@ def print_json(json_data: dict):
 @printserver.post("/api/print/text/")
 def print_text(text: str):
     return {"text": text}
-
-# if __name__ == "__main__":
-#     server_main()

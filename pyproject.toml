@@ -1,7 +1,7 @@
 [project]
 name = "printl"
 version = "0.1.0"
-description = ""
+description = "Printl is a desktop application for managing printers and exposing them as a service."
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
@@ -12,16 +12,16 @@ dependencies = [
 ]
 
 [tool.flet]
-# org name in reverse domain name notation, e.g. "com.mycompany".
+# org name in reverse domain name notation, e.g. "com.concatenateline".
 # Combined with project.name to build bundle ID for iOS and Android apps
-org = "com.mycompany"
+org = "com.concatenateline"
 
 # project display name that is used as an app title on Android and iOS home screens,
 # shown in window titles and about app dialogs on desktop.
 product = "printl"
 
 # company name to display in about app dialogs
-company = "Flet"
+company = "Concatenate Line"
 
 # copyright text to display in about app dialogs
 copyright = "Copyright (C) 2025 by Flet"
