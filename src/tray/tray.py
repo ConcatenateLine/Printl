@@ -3,10 +3,18 @@ import pystray
 from PIL import Image
 import threading
 
-def create_tray_icon(page: ft.Page):
+from state.state import AppState
 
+def create_tray_icon(page: ft.Page):
+    state: AppState = page.session.get("state")
+    
     def yes_click(e):
         icon.stop()
+
+        if state.is_server_running:
+            state.server_process.terminate()
+            state.server_process.wait(timeout=5)
+        
         page.window.destroy()
 
     def no_click(e):

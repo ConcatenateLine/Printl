@@ -25,6 +25,21 @@ def get_printers(session: SessionDep):
 def read_printer(printer_id: int, q: str = None):
     return {"printer_id": printer_id, "q": q}
 
+@printserver.post("/api/printers/public/")
+def print_public(printer: Printer, session: SessionDep):
+    printer_result = session.exec(select(Printer).where(Printer.name == printer.name)).one_or_none()
+    
+    if not printer_result:
+        raise HTTPException(status_code=404, detail="Printer not found")
+
+    printer_result.isPublic = printer.isPublic
+
+    session.add(printer_result)
+    session.commit()
+    session.refresh(printer_result)
+        
+    return printer_result
+
 @printserver.post("/api/printers/")
 def update_default_printer(config: Config, session: SessionDep):
     printer = session.exec(select(Printer).where(Printer.name == config.value)).one_or_none()

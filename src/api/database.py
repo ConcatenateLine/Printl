@@ -17,6 +17,11 @@ class Printer(SQLModel, table=True):
     queue_size: int = Field(default=0)
     port: str = Field(default="")
     driver: str = Field(default="")
+    isPublic: bool = Field(default=False)
+    formatsAllowed: str = Field(default="")
+    
+    def __str__(self):
+        return f"{self.name} - {self.status} - {self.jobs} jobs - {self.queue_size} pages - {self.isPublic} - {self.formatsAllowed}"
     
 class PrintJob(SQLModel, table=True):
     id: int = Field(primary_key=True)
@@ -39,7 +44,6 @@ def create_db_and_tables():
 def list_printers():
     try:
         # Get all printers
-        # printers_info = win32print.EnumPrinters(2)
         printers_info = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
 
         printers = []
@@ -49,10 +53,7 @@ def list_printers():
                 handle = win32print.OpenPrinter(printer[2])  # Use index 2 for printer name
                 printer_info = win32print.GetPrinter(handle, 2)
                 
-                # Convert status to human-readable format
-                status = "Online"
                 
-                # Check for multiple status conditions
                 status_flags = []
                 if printer_info['Status'] & win32print.PRINTER_STATUS_PAUSED:
                     status_flags.append("Paused")
@@ -74,13 +75,12 @@ def list_printers():
                     status_flags.append("Door Open")
                 
                 # Set status based on most critical condition
+                status = ""
                 if status_flags:
                     status = "/".join(status_flags)
                 
-                # Get number of jobs
                 jobs = printer_info['cJobs']
                 
-                # Get printer queue size
                 queue_size = printer_info['cJobs'] * printer_info['AveragePPM']
                 
                 printers.append({

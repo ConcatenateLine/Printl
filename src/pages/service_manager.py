@@ -4,35 +4,56 @@ import time
 
 from flet.utils.files import shutil
 
+from state.state import AppState
+
 class ServiceManager:
     page: ft.Page | None = None
-    server_process: subprocess.Popen | None = None
-    is_running: bool = False
-    
+    state: AppState | None = None
     controls = {}
 
     def __init__(self, page: ft.Page):
         self.page = page
-        self.server_process = None
-        self.is_running = False
         self.state = self.page.session.get("state")
 
     def create_view(self):
-        self.controls['server_status'] = ft.Text("Stopped", size=16, color=ft.Colors.RED)
-        self.controls['start_button'] = ft.ElevatedButton(
-            "Start Server",
-            icon=ft.Icons.PLAY_ARROW,
-            on_click=self.start_server,
-            key="start_button"
-        )
-        self.controls['stop_button'] = ft.ElevatedButton(
-            "Stop Server",
-            icon=ft.Icons.STOP,
-            on_click=self.stop_server,
-            disabled=True,
-            key="stop_button"
-        )
-        self.controls['logs_text'] = ft.Text("") 
+        if self.state.is_server_running:
+            self.controls['server_status'] = ft.Text("Running", size=16, color=ft.Colors.GREEN)
+            self.controls['start_button'] = ft.ElevatedButton(
+                "Start Server",
+                icon=ft.Icons.PLAY_ARROW,
+                on_click=self.start_server,
+                disabled=True,
+                key="start_button"
+            )
+            self.controls['stop_button'] = ft.ElevatedButton(
+                "Stop Server",
+                icon=ft.Icons.STOP,
+                on_click=self.stop_server,
+                key="stop_button"
+            )
+            self.controls['logs_text'] = ft.ListView(expand=1,
+                                                    spacing=10,
+                                                    auto_scroll=True,
+                                                    controls=[
+                                                        ft.Text(log) for log in self.state.server_logs
+                                                    ])
+            
+        else:
+            self.controls['server_status'] = ft.Text("Stopped", size=16, color=ft.Colors.RED)
+            self.controls['start_button'] = ft.ElevatedButton(
+                "Start Server",
+                icon=ft.Icons.PLAY_ARROW,
+                on_click=self.start_server,
+                key="start_button"
+            )
+            self.controls['stop_button'] = ft.ElevatedButton(
+                "Stop Server",
+                icon=ft.Icons.STOP,
+                on_click=self.stop_server,
+                disabled=True,
+                key="stop_button"
+            )
+            self.controls['logs_text'] = ft.ListView(expand=1, spacing=10, auto_scroll=True, controls=[])
         
         return ft.View(
             "/service",
@@ -41,7 +62,7 @@ class ServiceManager:
                     title=ft.Text("Service Manager"),
                     leading=ft.IconButton(
                         ft.Icons.ARROW_BACK,
-                        on_click=lambda _: self.page.go("/printers")
+                        on_click=lambda _: self.page.go("/title")
                     )
                 ),
                 ft.Column(
@@ -56,22 +77,21 @@ class ServiceManager:
                         ),
                         ft.Text("Server Logs", size=16, weight=ft.FontWeight.BOLD),
                         ft.Container(
-                            self.controls['logs_text'],
-                            height=200,
-                            padding=10,
+                            content=self.controls['logs_text'],
+                            height=440,
+                            padding=5,
                             bgcolor=ft.Colors.SURFACE,
                             border_radius=10,
-                            key="logs_text"
                         )
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=20
+                    spacing=10
                 )
             ]
         )
         
     def start_server(self, e):
-        if self.is_running:
+        if self.state.is_server_running:
             self.page.open(
                 ft.SnackBar(
                     ft.Text("Server is already running"),
@@ -82,13 +102,11 @@ class ServiceManager:
             return
 
         try:
-            # Check if Python is in PATH
             python_path = shutil.which("python")
             if not python_path:
                 raise FileNotFoundError("Python executable not found in PATH")
 
-            # Start the server
-            self.server_process = subprocess.Popen(
+            self.state.server_process = subprocess.Popen(
                 [python_path, "-m", "uvicorn", "src.api.server:printserver",
                     "--host", "0.0.0.0", "--port", "9417"],
                 stdout=subprocess.PIPE,
@@ -97,16 +115,15 @@ class ServiceManager:
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP  # For Windows
             )
 
-            # Wait a moment to check if the server started successfully
             time.sleep(1)
-            if self.server_process.poll() is not None:
-                stdout, stderr = self.server_process.communicate()
+            if self.state.server_process.poll() is not None:
+                stdout, stderr = self.state.server_process.communicate()
                 error_msg = stderr.strip() if stderr else stdout.strip()
                 print(
-                    f"Server failed to start with exit code {self.server_process.poll()}\nError: {error_msg}")
+                    f"Server failed to start with exit code {self.state.server_process.poll()}\nError: {error_msg}")
 
                 raise RuntimeError(
-                    f"Server failed to start with exit code {self.server_process.poll()}\nError: {error_msg}")
+                    f"Server failed to start with exit code {self.state.server_process.poll()}\nError: {error_msg}")
 
             # Verify server is running
             try:
@@ -116,13 +133,12 @@ class ServiceManager:
                     raise RuntimeError(
                         f"Server started but health check failed: {response.text}")
             except Exception as e:
-                self.server_process.terminate()
+                self.state.server_process.terminate()
                 raise RuntimeError(
                     f"Server started but failed health check: {str(e)}")
 
-            self.is_running = True
+            self.state.is_server_running = True
             self.update_ui()
-            self.update_logs()
             self.page.open(
                 ft.SnackBar(
                     ft.Text("Server started successfully"),
@@ -130,6 +146,8 @@ class ServiceManager:
                     bgcolor=ft.Colors.GREEN
                 )
             )
+            self.update_logs()
+            
 
         except FileNotFoundError as e:
             self.page.open(
@@ -149,29 +167,28 @@ class ServiceManager:
             )
 
     def stop_server(self, e):
-        if self.is_running:
+        if self.state.is_server_running:
             try:
-                self.server_process.terminate()
-                self.server_process.wait(timeout=5)
+                self.state.server_process.terminate()
+                self.state.server_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 raise RuntimeError("Failed to stop server")
             
-            self.server_process = None
-            self.is_running = False
+            self.state.server_process = None
+            self.state.is_server_running = False
             self.update_ui()
 
     def update_logs(self):
-        if self.server_process and self.is_running:
+        if self.state.server_process and self.state.is_server_running:
             while True:
-                line = self.server_process.stdout.readline()
-                print('line')
-                print(line)
+                line = self.state.server_process.stdout.readline()
                 if not line:
                     break
+                self.state.server_logs.append(str(line))
                 logs = self.page.get_control(self.controls['logs_text'].uid)
-                print(line)
-                logs.value += line
-                logs.update()
+                if logs:
+                    logs.controls.append(ft.Text(str(line)))
+                    logs.update()
                 time.sleep(0.1)
 
     def update_ui(self):
@@ -179,7 +196,7 @@ class ServiceManager:
         start_button = self.page.get_control(self.controls['start_button'].uid)
         stop_button = self.page.get_control(self.controls['stop_button'].uid)
 
-        if self.is_running:
+        if self.state.is_server_running:
             status.value = "Running"
             status.color = ft.Colors.GREEN
             start_button.disabled = True
