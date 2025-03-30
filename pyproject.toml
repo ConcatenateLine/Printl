@@ -1,6 +1,6 @@
 [project]
 name = "printl"
-version = "0.1.0"
+version = "1.0.0"
 description = "Printl is a desktop application for managing printers and exposing them as a service."
 readme = "README.md"
 requires-python = ">=3.9"

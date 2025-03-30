@@ -1,13 +1,20 @@
 from fastapi import Depends
-from sqlmodel import Session, SQLModel, create_engine, Field
+from sqlmodel import Session, SQLModel, create_engine, Field, select
 import win32print
 from typing import Annotated
+import os
 
 class Config(SQLModel, table=True):
     id: int = Field(primary_key=True)
     name: str = Field(default="")
     value: str = Field(default="")
     secret: str = Field(default="")
+
+class Domains(SQLModel, table=True):
+    id: int = Field(primary_key=True)
+    domain: str = Field(default="")
+    secret: str = Field(default="")
+    status: str = Field(default="Active")
 
 class Printer(SQLModel, table=True):
     id: int = Field(primary_key=True)
@@ -36,10 +43,16 @@ connect_args = {"check_same_thread": False}
 engine = create_engine(sqlite_url, connect_args=connect_args)
 
 def create_db_and_tables():
+    
+    if os.path.exists(sqlite_file_name):
+        print("Database already exists.")
+        return
     # Drop all tables
     SQLModel.metadata.drop_all(engine)
     # Create tables
     SQLModel.metadata.create_all(engine)
+    
+    print("Database and tables created.")
     
 def list_printers():
     try:
@@ -94,8 +107,9 @@ def list_printers():
                 
                 printer = Printer(name=printer[2], status=status, jobs=jobs, queue_size=queue_size, port=printer_info['pPortName'], driver=printer_info['pDriverName'])
                 
-                session.add(printer)
-
+                if not session.exec(select(Printer).where(Printer.name == printer.name)).first():
+                    session.add(printer)
+ 
             session.commit()
             print("Printers added to database.")
         

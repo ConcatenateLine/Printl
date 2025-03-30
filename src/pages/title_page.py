@@ -38,13 +38,6 @@ class TitlePage(ft.View):
                     ],
                     alignment=ft.MainAxisAlignment.CENTER
                 ),
-                ft.Row(
-                    [
-                        ft.Text("Default Printer:", size=20, weight=ft.FontWeight.BOLD),
-                        ft.Text(f"{self.state.selected_printer['value'] if self.state.selected_printer else 'Not Set'}", size=20, weight=ft.FontWeight.BOLD)
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER
-                ),
                 ft.ElevatedButton(
                     "Go to Info Page",
                     on_click=lambda _: page.go("/info"),
@@ -53,11 +46,18 @@ class TitlePage(ft.View):
                 ft.ElevatedButton(
                     "Go to Printers Page",
                     on_click=lambda _: page.go("/printers"),
-                    width=300
+                    width=300,
+                    visible=self.state.is_server_running
+                ),
+                ft.ElevatedButton(
+                    "Go to Domains Page",
+                    on_click=lambda _: page.go("/domains"),
+                    width=300,
+                    visible=self.state.is_server_running
                 ),
                 ft.ElevatedButton(
                     "Go to Service Manager",
-                    on_click=lambda _: self.page.go("/service"),
+                    on_click=lambda _: page.go("/service"),
                     width=300
                 ),
             ]

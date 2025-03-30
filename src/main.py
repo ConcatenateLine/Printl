@@ -1,5 +1,6 @@
 import flet as ft
 
+from pages.domains_page import DomainsPage
 from pages.service_manager import ServiceManager
 from pages.title_page import TitlePage
 from pages.info_page import InfoPage
@@ -36,6 +37,8 @@ def app(page: ft.Page):
             page.views.append(PrintersPage(page).create_view())
         elif page.route == "/service":
             page.views.append(ServiceManager(page).create_view())
+        elif page.route == "/domains":
+            page.views.append(DomainsPage(page).create_view())
         page.update()
 
     page.on_route_change = route_change

@@ -53,7 +53,7 @@ class ServiceManager:
                 disabled=True,
                 key="stop_button"
             )
-            self.controls['logs_text'] = ft.ListView(expand=1, spacing=10, auto_scroll=True, controls=[])
+            self.controls['logs_text'] = ft.ListView(expand=1, spacing=10, auto_scroll=True, controls=[],padding=5)
         
         return ft.View(
             "/service",
@@ -128,12 +128,14 @@ class ServiceManager:
             # Verify server is running
             try:
                 import requests
-                response = requests.get("http://127.0.0.1:9417/api/print")
+                response = requests.get("http://127.0.0.1:9417/api/version")
                 if response.status_code != 200:
                     raise RuntimeError(
                         f"Server started but health check failed: {response.text}")
             except Exception as e:
                 self.state.server_process.terminate()
+                self.state.is_server_running = False
+                self.update_ui()
                 raise RuntimeError(
                     f"Server started but failed health check: {str(e)}")
 
@@ -171,6 +173,13 @@ class ServiceManager:
             try:
                 self.state.server_process.terminate()
                 self.state.server_process.wait(timeout=5)
+                self.page.open(
+                    ft.SnackBar(
+                        ft.Text("Server stopped successfully"),
+                        action="OK",
+                        bgcolor=ft.Colors.LIGHT_BLUE
+                    )
+                )
             except subprocess.TimeoutExpired:
                 raise RuntimeError("Failed to stop server")
             

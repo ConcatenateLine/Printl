@@ -1,6 +1,4 @@
 import flet as ft
-import requests
-
 from state.state import AppState
 
 
