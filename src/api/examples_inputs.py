@@ -56,3 +56,6 @@ class JsonExample(BaseModel):
 
 class TextExample(BaseModel):
     text: str = "Important Memo:\n\nPlease ensure all reports are submitted by 5 PM today.\nMake sure to include all necessary documentation.\nThank you,\nManagement"
+
+class UrlExample(BaseModel):
+    url: str = "https://www.example.com/exmaplefile.pdf"

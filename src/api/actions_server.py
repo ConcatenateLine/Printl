@@ -6,6 +6,10 @@ import win32print
 from fastapi import HTTPException
 from sqlmodel import select
 from .database import Config, SessionDep
+import requests
+import mimetypes
+from pathlib import Path
+
 
 def print_pdf_action(input_printer_name: str, pdf_data: bytes, session: SessionDep):
     try:
@@ -110,6 +114,7 @@ def print_pdf_action(input_printer_name: str, pdf_data: bytes, session: SessionD
         print(f"Error printing PDF: {str(e)}")
         return False
 
+
 def print_text_action(input_printer_name: str, text: str, session: SessionDep):
     try:
         printer_name = input_printer_name
@@ -119,31 +124,35 @@ def print_text_action(input_printer_name: str, text: str, session: SessionDep):
                 .where(Config.name == "default_printer")
                 .order_by(Config.id.desc())
             ).first()
-            
+
             if not result_printer:
-                raise HTTPException(status_code=404, detail="Default printer not found")
-            
+                raise HTTPException(
+                    status_code=404, detail="Default printer not found")
+
             printer_name = result_printer.value
-            
+
         # Verify printer exists and is ready
-        printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
+        printers = win32print.EnumPrinters(
+            win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
         found = False
         for printer in printers:
             if printer[2].lower() == printer_name.lower():
                 found = True
                 break
-        
+
         if not found:
-            raise HTTPException(status_code=404, detail=f"Printer '{printer_name}' not found")
-        
+            raise HTTPException(
+                status_code=404, detail=f"Printer '{printer_name}' not found")
+
         # Get printer status
         handle = win32print.OpenPrinter(printer_name)
         info = win32print.GetPrinter(handle, 2)
         win32print.ClosePrinter(handle)
-        
+
         if info['Status'] & win32print.PRINTER_STATUS_ERROR:
-            raise HTTPException(status_code=500, detail=f"Printer '{printer_name}' is in error state")
-        
+            raise HTTPException(
+                status_code=500, detail=f"Printer '{printer_name}' is in error state")
+
          # Create a temporary RTF file with formatted text
         with tempfile.NamedTemporaryFile(delete=False, suffix='.rtf') as temp_file:
             # Create RTF content with formatting
@@ -157,7 +166,7 @@ def print_text_action(input_printer_name: str, text: str, session: SessionDep):
             )
             temp_file.write(rtf_content.encode('utf-8'))
             temp_file_path = temp_file.name
-        
+
         try:
             # Try to print using ShellExecute
             win32api.ShellExecute(
@@ -175,37 +184,41 @@ def print_text_action(input_printer_name: str, text: str, session: SessionDep):
             # Fallback to raw text printing
             doc_info = ("Text Document", None, "RAW")
             handle = win32print.OpenPrinter(printer_name)
-            
+
             job_id = win32print.StartDocPrinter(handle, 1, doc_info)
-            
+
             if job_id:
                 try:
                     win32print.StartPagePrinter(handle)
                     formatted_text = f"{text}\r\n"
-                    win32print.WritePrinter(handle, formatted_text.encode('utf-8'))
+                    win32print.WritePrinter(
+                        handle, formatted_text.encode('utf-8'))
                     win32print.EndPagePrinter(handle)
                     win32print.EndDocPrinter(handle)
                     print("Text print attempt successful using raw text")
                     return True
                 except Exception as e:
                     print(f"Raw text print attempt failed: {str(e)}")
-                    raise HTTPException(status_code=500, detail=f"Failed to print text: {str(e)}")
+                    raise HTTPException(
+                        status_code=500, detail=f"Failed to print text: {str(e)}")
                 finally:
                     win32print.ClosePrinter(handle)
             else:
-                raise HTTPException(status_code=500, detail="Failed to start print job")
-            
+                raise HTTPException(
+                    status_code=500, detail="Failed to start print job")
+
         finally:
             # Clean up temporary file
             try:
                 os.unlink(temp_file_path)
             except:
                 pass
-            
+
     except Exception as e:
         print(f"Error printing text: {str(e)}")
         return False
-    
+
+
 def print_json_action(input_printer_name: str, json_data: dict, session: SessionDep):
     try:
         printer_name = input_printer_name
@@ -215,33 +228,37 @@ def print_json_action(input_printer_name: str, json_data: dict, session: Session
                 .where(Config.name == "default_printer")
                 .order_by(Config.id.desc())
             ).first()
-            
+
             if not result_printer:
-                raise HTTPException(status_code=404, detail="Default printer not found")
-            
+                raise HTTPException(
+                    status_code=404, detail="Default printer not found")
+
             printer_name = result_printer.value
-            
+
         # Verify printer exists and is ready
-        printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
+        printers = win32print.EnumPrinters(
+            win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
         found = False
         for printer in printers:
             if printer[2].lower() == printer_name.lower():
                 found = True
                 break
-        
+
         if not found:
-            raise HTTPException(status_code=404, detail=f"Printer '{printer_name}' not found")
-        
+            raise HTTPException(
+                status_code=404, detail=f"Printer '{printer_name}' not found")
+
         # Get printer status
         handle = win32print.OpenPrinter(printer_name)
         info = win32print.GetPrinter(handle, 2)
-        
+
         if info['Status'] & win32print.PRINTER_STATUS_ERROR:
-            raise HTTPException(status_code=500, detail=f"Printer '{printer_name}' is in error state")
-        
+            raise HTTPException(
+                status_code=500, detail=f"Printer '{printer_name}' is in error state")
+
         # Convert JSON to formatted text
         formatted_text = json.dumps(json_data, indent=2, ensure_ascii=False)
-        
+
         # Create a temporary RTF file with formatted text
         with tempfile.NamedTemporaryFile(delete=False, suffix='.rtf') as temp_file:
             # Create RTF content with formatting
@@ -257,7 +274,7 @@ def print_json_action(input_printer_name: str, json_data: dict, session: Session
             )
             temp_file.write(rtf_content.encode('utf-8'))
             temp_file_path = temp_file.name
-        
+
         try:
             # Try to print using ShellExecute
             win32api.ShellExecute(
@@ -275,37 +292,41 @@ def print_json_action(input_printer_name: str, json_data: dict, session: Session
             # Fallback to raw text printing
             doc_info = ("JSON Document", None, "RAW")
             handle = win32print.OpenPrinter(printer_name)
-            
+
             job_id = win32print.StartDocPrinter(handle, 1, doc_info)
-            
+
             if job_id:
                 try:
                     win32print.StartPagePrinter(handle)
                     formatted_text = f"JSON Data:\n\n{formatted_text}\n"
-                    win32print.WritePrinter(handle, formatted_text.encode('utf-8'))
+                    win32print.WritePrinter(
+                        handle, formatted_text.encode('utf-8'))
                     win32print.EndPagePrinter(handle)
                     win32print.EndDocPrinter(handle)
                     print("JSON print attempt successful using raw text")
                     return True
                 except Exception as e:
                     print(f"Raw text print attempt failed: {str(e)}")
-                    raise HTTPException(status_code=500, detail=f"Failed to print JSON: {str(e)}")
+                    raise HTTPException(
+                        status_code=500, detail=f"Failed to print JSON: {str(e)}")
                 finally:
                     win32print.ClosePrinter(handle)
             else:
-                raise HTTPException(status_code=500, detail="Failed to start print job")
-            
+                raise HTTPException(
+                    status_code=500, detail="Failed to start print job")
+
         finally:
             # Clean up temporary file
             try:
                 os.unlink(temp_file_path)
             except:
                 pass
-            
+
     except Exception as e:
         print(f"Error printing JSON: {str(e)}")
         return False
-    
+
+
 def print_ticket_action(input_printer_name: str, ticket_data: dict, session: SessionDep):
     try:
         printer_name = input_printer_name
@@ -315,49 +336,53 @@ def print_ticket_action(input_printer_name: str, ticket_data: dict, session: Ses
                 .where(Config.name == "default_printer")
                 .order_by(Config.id.desc())
             ).first()
-            
+
             if not result_printer:
-                raise HTTPException(status_code=404, detail="Default printer not found")
-            
+                raise HTTPException(
+                    status_code=404, detail="Default printer not found")
+
             printer_name = result_printer.value
-            
+
         # Verify printer exists and is ready
-        printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
+        printers = win32print.EnumPrinters(
+            win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
         found = False
         for printer in printers:
             if printer[2].lower() == printer_name.lower():
                 found = True
                 break
-        
+
         if not found:
-            raise HTTPException(status_code=404, detail=f"Printer '{printer_name}' not found")
-        
+            raise HTTPException(
+                status_code=404, detail=f"Printer '{printer_name}' not found")
+
         # Get printer status
         handle = win32print.OpenPrinter(printer_name)
         info = win32print.GetPrinter(handle, 2)
-        
+
         if info['Status'] & win32print.PRINTER_STATUS_ERROR:
-            raise HTTPException(status_code=500, detail=f"Printer '{printer_name}' is in error state")
-        
+            raise HTTPException(
+                status_code=500, detail=f"Printer '{printer_name}' is in error state")
+
         # Create ticket format
         ticket = f"""
         ======================
         TICKET
         ======================
-        
+
         {ticket_data.get('header', 'NO HEADER')}
-        
+
         ======================
-        
+
         {ticket_data.get('items', '')}
-        
+
         ======================
-        
+
         {ticket_data.get('footer', 'NO FOOTER')}
-        
+
         ======================
         """
-        
+
         # Create a temporary RTF file with formatted text
         with tempfile.NamedTemporaryFile(delete=False, suffix='.rtf') as temp_file:
             # Create RTF content with formatting
@@ -371,7 +396,7 @@ def print_ticket_action(input_printer_name: str, ticket_data: dict, session: Ses
             )
             temp_file.write(rtf_content.encode('utf-8'))
             temp_file_path = temp_file.name
-        
+
         try:
             # Try to print using ShellExecute
             win32api.ShellExecute(
@@ -389,34 +414,148 @@ def print_ticket_action(input_printer_name: str, ticket_data: dict, session: Ses
             # Fallback to raw text printing
             doc_info = ("Ticket", None, "RAW")
             handle = win32print.OpenPrinter(printer_name)
-            
+
             job_id = win32print.StartDocPrinter(handle, 1, doc_info)
-            
+
             if job_id:
                 try:
                     win32print.StartPagePrinter(handle)
                     formatted_text = f"{ticket}\n"
-                    win32print.WritePrinter(handle, formatted_text.encode('utf-8'))
+                    win32print.WritePrinter(
+                        handle, formatted_text.encode('utf-8'))
                     win32print.EndPagePrinter(handle)
                     win32print.EndDocPrinter(handle)
                     print("Ticket print attempt successful using raw text")
                     return True
                 except Exception as e:
                     print(f"Raw text print attempt failed: {str(e)}")
-                    raise HTTPException(status_code=500, detail=f"Failed to print ticket: {str(e)}")
+                    raise HTTPException(
+                        status_code=500, detail=f"Failed to print ticket: {str(e)}")
                 finally:
                     win32print.ClosePrinter(handle)
             else:
-                raise HTTPException(status_code=500, detail="Failed to start print job")
-            
+                raise HTTPException(
+                    status_code=500, detail="Failed to start print job")
+
         finally:
             # Clean up temporary file
             try:
                 os.unlink(temp_file_path)
             except:
                 pass
-            
+
     except Exception as e:
         print(f"Error printing ticket: {str(e)}")
         return False
+
+
+def print_url_action(input_printer_name: str, url: str, session: SessionDep):
+    try:
+        printer_name = input_printer_name
+        if not printer_name:
+            result_printer = session.exec(
+                select(Config)
+                .where(Config.name == "default_printer")
+                .order_by(Config.id.desc())
+            ).first()
+
+            if not result_printer:
+                raise HTTPException(
+                    status_code=404, detail="Default printer not found")
+
+            printer_name = result_printer.value
+
+        # Verify printer exists and is ready
+        printers = win32print.EnumPrinters(
+            win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
+        found = False
+        for printer in printers:
+            if printer[2].lower() == printer_name.lower():
+                found = True
+                break
+
+        if not found:
+            raise HTTPException(
+                status_code=404, detail=f"Printer '{printer_name}' not found")
+
+        # Get printer status
+        handle = win32print.OpenPrinter(printer_name)
+        info = win32print.GetPrinter(handle, 2)
+        win32print.ClosePrinter(handle)
+        
+        if info['Status'] & win32print.PRINTER_STATUS_ERROR:
+            raise HTTPException(
+                status_code=500, detail=f"Printer '{printer_name}' is in error state")
+        
+        # Download the URL content
+        response = requests.get(url)
+        if not response.ok:
+            raise HTTPException(status_code=400, detail=f"Failed to download URL: {response.status_code}")
+
+        # Get file type from URL or content type
+        file_type = None
+        if '.' in url:
+            extension = Path(url).suffix.lower()
+            file_type = mimetypes.guess_type(f"file{extension}")[0]
+        elif 'content-type' in response.headers:
+            file_type = response.headers['content-type']
+
+        if not file_type:
+            raise HTTPException(status_code=400, detail="Could not determine file type")
+
+        # Save content to temporary file with appropriate extension
+        try:
+            suffix = mimetypes.guess_extension(file_type) or '.tmp'
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                temp_file.write(response.content)
+                temp_file_path = temp_file.name
+            
+            print(f"File type: {file_type}")
+            print(f"File path: {temp_file_path}")
+            
+            # Print based on file type
+            try:
+                handle = win32print.OpenPrinter(printer_name)
+
+                try:
+                    if file_type.startswith('application/pdf'):
+                        # Handle PDF printing
+                        doc_info = ("PDF Document", None, "XPS_PASS")
+                        job_id = win32print.StartDocPrinter(handle, 1, doc_info)
+                    elif file_type.startswith('text/'):
+                        # Handle text files
+                        doc_info = ("Text Document", None, "RAW")
+                        job_id = win32print.StartDocPrinter(handle, 1, doc_info)
+                    else:
+                        # Default handling for other file types
+                        doc_info = ("Document", None, "RAW")
+                        job_id = win32print.StartDocPrinter(handle, 1, doc_info)
+                    
+                    if job_id:
+                        try:
+                            win32print.StartPagePrinter(handle)
+                            with open(temp_file_path, 'rb') as f:
+                                data = f.read()
+                                win32print.WritePrinter(handle, data)
+                            win32print.EndPagePrinter(handle)
+                            win32print.EndDocPrinter(handle)
+                            return True
+                        except Exception as e:
+                            print(f"Error printing: {str(e)}")
+                            raise HTTPException(status_code=500, detail=f"Failed to print: {str(e)}")
+                        finally:
+                            win32print.ClosePrinter(handle)
+                    else:
+                        raise HTTPException(status_code=500, detail="Failed to start print job")
+                except Exception as e:
+                    print(f"Error printing: {str(e)}")
+                    raise HTTPException(status_code=500, detail=f"Failed to print: {str(e)}")
+            finally:
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save URL content to temporary file: {str(e)}")
     
+    except Exception as e:
+        print(f"Error printing URL: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -4,12 +4,12 @@ from fastapi import Body, Depends, FastAPI, HTTPException, UploadFile, File
 from .dependences import validate_source_ip
 
 from .actions_local import get_default_printer_action, get_public_printers_action
-from .actions_server import print_pdf_action, print_text_action, print_json_action, print_ticket_action
+from .actions_server import print_pdf_action, print_text_action, print_json_action, print_ticket_action, print_url_action
 
 from .database import Domains, create_db_and_tables, list_printers, SessionDep, Printer, Config
 from sqlmodel import select
-from .examples_inputs import TicketExample, JsonExample, TextExample
-
+from .examples_inputs import TicketExample, JsonExample, TextExample, UrlExample
+from fastapi.middleware.cors import CORSMiddleware
 
 async def lifespan(app: FastAPI):
     async def startup():
@@ -26,6 +26,12 @@ async def lifespan(app: FastAPI):
 
 printserver = FastAPI(lifespan=lifespan, title="Print Server API",
                       description="API for managing and printing documents", version="1.0.0")
+
+printserver.add_middleware(CORSMiddleware,
+                           allow_origins=["*"],
+                           allow_methods=["*"],
+                           allow_headers=["*"],
+                           allow_credentials=True)
 
 @printserver.get("/api/version", description="Get API version")
 def get_version():
@@ -217,3 +223,11 @@ def print_ticket(session: SessionDep, ticket_data: dict = Body(..., example=Tick
         raise HTTPException(status_code=500, detail="Failed to print ticket")
 
     return {"status": "success", "message": "Ticket printed successfully"}
+
+@printserver.post("/local/print/url/", description="Print URL data", dependencies=[Depends(validate_source_ip)])
+def print_url(session: SessionDep, url: str = Body(..., example=UrlExample().url), printer_name: Optional[str] = None):
+    success = print_url_action(printer_name, url, session)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to print URL")
+
+    return {"status": "success", "message": "URL printed successfully"}
