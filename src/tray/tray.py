@@ -5,69 +5,95 @@ import threading
 
 from state.state import AppState
 
-def create_tray_icon(page: ft.Page):
-    state: AppState = page.session.get("state")
-    
-    def yes_click(e):
-        icon.stop()
-
-        if state.is_server_running:
-            state.server_process.terminate()
-            state.server_process.wait(timeout=5)
-        
-        page.window.destroy()
-
-    def no_click(e):
-        page.close(confirm_dialog)
-        page.window.minimized = True
-        page.window.visible = False
-        page.update()
-
-    confirm_dialog = ft.AlertDialog(
-        modal=True,
-        title=ft.Text("Please confirm"),
-        content=ft.Text("Do you really want to exit this app?"),
-        actions=[
-            ft.ElevatedButton("Yes", on_click=yes_click),
-            ft.OutlinedButton("Minimize to tray", on_click=no_click),
-        ],
-        actions_alignment=ft.MainAxisAlignment.END,
-    )
-    
-    def on_click(icon, item):
-        if str(item) == 'Show':
-            page.window.minimized = False
-            page.window.visible = True
-        elif str(item) == 'Hide':
-            page.window.minimized = True
-            page.window.visible = False
-        elif str(item) == 'Quit':
-            page.window.minimized = False
-            page.window.visible = True
-            page.window.close()
-
-        page.update()
-    
+class TrayIcon:
+    page: ft.Page = None
+    state: AppState = None
     logo = Image.open("src/assets/icon.png")
-    
-    menu = pystray.Menu(
-        pystray.MenuItem('Show', on_click),
-        pystray.MenuItem('Hide', on_click),
-        pystray.MenuItem('Quit', on_click)
-    )
-    
-    icon = pystray.Icon("Printl", logo, "Printl", menu)
-    
-    def run_tray():
-        icon.run()
-    
-    tray_thread = threading.Thread(target=run_tray)
-    tray_thread.daemon = True
-    tray_thread.start()
-    
-    def on_window_close(e):
+    confirm_dialog = None
+    icon = None
+    tray_thread = None
+
+    def __init__(self, page: ft.Page):
+        self.page = page
+        self.state = self.page.session.get("state")
+        
+        self.state.add_event_handler('server_status_changed', self.update_ui_tray, "server_status_changed_tray")
+
+        self.confirm_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Please confirm"),
+            content=ft.Text("Do you really want to exit this app?"),
+            actions=[
+                ft.ElevatedButton("Yes", on_click=self.yes_click),
+                ft.OutlinedButton("Minimize to tray", on_click=self.no_click),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        self.icon = pystray.Icon("Printl", self.logo, "Printl", pystray.Menu(
+            pystray.MenuItem('Server', pystray.Menu(
+                pystray.MenuItem('Start server', self.on_click,
+                                 visible=lambda item: not self.state.is_server_running),
+                pystray.MenuItem('Stop server', self.on_click,
+                                 visible=lambda item: self.state.is_server_running),
+            )),
+            pystray.MenuItem('Show', self.on_click),
+            pystray.MenuItem('Hide', self.on_click),
+            pystray.MenuItem('Quit', self.on_click)
+        ))
+
+        self.tray_thread = threading.Thread(target=self.run_tray)
+        self.tray_thread.daemon = True
+        self.tray_thread.start()
+
+        page.window.on_event = self.on_window_close
+        page.window.prevent_close = True
+
+    def run_tray(self):
+        self.icon.run()
+
+    def yes_click(self, e):
+        self.icon.stop()
+
+        if self.state.is_server_running:
+            self.state.server_process.terminate()
+            self.state.server_process.wait(timeout=5)
+
+        self.page.window.destroy()
+
+    def no_click(self, e):
+        self.page.close(self.confirm_dialog)
+        self.page.window.minimized = True
+        self.page.window.visible = False
+        self.page.update()
+
+    def update_ui_tray(self, *args, **kwargs):
+        print("Updating tray icon...")
+        self.icon.update_menu()
+        self.page.update()
+
+    def on_click(self, icon, item):
+        if str(item) == 'Start server':
+            self.state.start_server()
+            icon.notify("Server started successfully")
+        elif str(item) == 'Stop server':
+            if self.state.is_server_running:
+                self.state.stop_server()
+                self.page.go("/service")
+                icon.notify("Server stopped successfully")
+        elif str(item) == 'Show':
+            self.page.window.minimized = False
+            self.page.window.visible = True
+        elif str(item) == 'Hide':
+            self.page.window.minimized = True
+            self.page.window.visible = False
+        elif str(item) == 'Quit':
+            self.page.window.minimized = False
+            self.page.window.visible = True
+            self.page.window.close()
+
+        self.update_ui_tray()
+
+    def on_window_close(self, e):
         if e.data == 'close':
-            page.open(confirm_dialog)
-    
-    page.window.on_event = on_window_close
-    page.window.prevent_close = True
+            self.page.open(self.confirm_dialog)

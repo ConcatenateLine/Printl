@@ -7,14 +7,14 @@ from pages.info_page import InfoPage
 from pages.printers_page import PrintersPage
 
 from state.state import AppState
-from tray.tray import create_tray_icon
+from tray.tray import TrayIcon
 
 def app(page: ft.Page):
     state = AppState()
     
     page.session.set("state", state)
     
-    create_tray_icon(page)
+    tray_icon = TrayIcon(page)
     
     page.title = "Printl"
     page.window.height = 740
@@ -30,7 +30,7 @@ def app(page: ft.Page):
     def route_change(e):
         page.views.clear()
         if page.route == "/title":
-            page.views.append(TitlePage(page))
+            page.views.append(TitlePage(page).create_view())
         elif page.route == "/info":
             page.views.append(InfoPage(page))
         elif page.route == "/printers":

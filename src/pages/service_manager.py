@@ -1,8 +1,5 @@
 import flet as ft
 import subprocess
-import time
-
-from flet.utils.files import shutil
 
 from state.state import AppState
 
@@ -10,10 +7,13 @@ class ServiceManager:
     page: ft.Page | None = None
     state: AppState | None = None
     controls = {}
-
+    
     def __init__(self, page: ft.Page):
         self.page = page
         self.state = self.page.session.get("state")
+        
+        self.state.add_event_handler('log_updated', self.update_logs, "log_updated_service_manager")
+        self.state.add_event_handler('server_status_changed', self.update_ui, "server_status_changed_service_manager")
 
     def create_view(self):
         if self.state.is_server_running:
@@ -102,44 +102,18 @@ class ServiceManager:
             return
 
         try:
-            python_path = shutil.which("python")
-            if not python_path:
-                raise FileNotFoundError("Python executable not found in PATH")
+            result = self.state.start_server()
 
-            self.state.server_process = subprocess.Popen(
-                [python_path, "-m", "uvicorn", "src.api.server:printserver",
-                    "--host", "0.0.0.0", "--port", "9417"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP  # For Windows
-            )
-
-            time.sleep(1)
-            if self.state.server_process.poll() is not None:
-                stdout, stderr = self.state.server_process.communicate()
-                error_msg = stderr.strip() if stderr else stdout.strip()
-                print(
-                    f"Server failed to start with exit code {self.state.server_process.poll()}\nError: {error_msg}")
-
-                raise RuntimeError(
-                    f"Server failed to start with exit code {self.state.server_process.poll()}\nError: {error_msg}")
-
-            # Verify server is running
-            try:
-                import requests
-                response = requests.get("http://127.0.0.1:9417/api/version")
-                if response.status_code != 200:
-                    raise RuntimeError(
-                        f"Server started but health check failed: {response.text}")
-            except Exception as e:
-                self.state.server_process.terminate()
-                self.state.is_server_running = False
-                self.update_ui()
-                raise RuntimeError(
-                    f"Server started but failed health check: {str(e)}")
-
-            self.state.is_server_running = True
+            if not result:
+                self.page.open(
+                    ft.SnackBar(
+                        ft.Text("Failed to start server"),
+                        action="OK",
+                        bgcolor=ft.Colors.RED
+                    )
+                )
+                return
+            
             self.update_ui()
             self.page.open(
                 ft.SnackBar(
@@ -169,38 +143,42 @@ class ServiceManager:
             )
 
     def stop_server(self, e):
-        if self.state.is_server_running:
-            try:
-                self.state.server_process.terminate()
-                self.state.server_process.wait(timeout=5)
+        try:
+            result = self.state.stop_server()
+            self.update_logs()
+            
+            if not result:
                 self.page.open(
                     ft.SnackBar(
-                        ft.Text("Server stopped successfully"),
+                        ft.Text("Failed to stop server"),
+                        action="OK",
+                        bgcolor=ft.Colors.RED
+                    )
+                )
+                return
+
+            self.page.open(
+                ft.SnackBar(
+                    ft.Text("Server stopped successfully"),
                         action="OK",
                         bgcolor=ft.Colors.LIGHT_BLUE
                     )
                 )
-            except subprocess.TimeoutExpired:
-                raise RuntimeError("Failed to stop server")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Failed to stop server")
             
-            self.state.server_process = None
-            self.state.is_server_running = False
-            self.update_ui()
+        self.update_ui()
 
-    def update_logs(self):
-        if self.state.server_process and self.state.is_server_running:
-            while True:
-                line = self.state.server_process.stdout.readline()
-                if not line:
-                    break
-                self.state.server_logs.append(str(line))
-                logs = self.page.get_control(self.controls['logs_text'].uid)
-                if logs:
-                    logs.controls.append(ft.Text(str(line)))
-                    logs.update()
-                time.sleep(0.1)
+    def update_logs(self, *args, **kwargs):
+        logs = self.page.get_control(self.controls['logs_text'].uid)
+        if logs and args and len(args) > 0:
+            logs.controls.append(ft.Text(str(args[0])))
+            logs.update()
 
-    def update_ui(self):
+    def update_ui(self, *args, **kwargs):
+        if not self.page.route == "/service":
+            return
+        
         status = self.page.get_control(self.controls['server_status'].uid)
         start_button = self.page.get_control(self.controls['start_button'].uid)
         stop_button = self.page.get_control(self.controls['stop_button'].uid)
@@ -219,4 +197,3 @@ class ServiceManager:
         status.update()
         start_button.update()
         stop_button.update()
-    
